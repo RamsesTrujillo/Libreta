@@ -1,6 +1,7 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
 <title>Libreta de Hamburguesas</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Inter:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: sidebar + sticky header on desktop, bottom tab bar on phones.
@@ -190,6 +191,9 @@ td{padding:11px 10px;border-top:1px solid var(--bd);white-space:nowrap}
 .set h2{font:600 16px/1.3 var(--fb)}
 .hint{color:var(--mu);font-size:13px}
 .hint.bad{color:var(--dn)}
+.sh{font:700 14px/1.2 var(--fd);margin:16px 0 6px}
+.sh:first-of-type{margin-top:12px}
+#sync[data-st=err]{color:var(--dn)}
 .ia{display:flex;gap:8px;flex-wrap:wrap}
 .ia input{flex:1 1 110px;min-width:0}
 
@@ -279,7 +283,7 @@ td{padding:11px 10px;border-top:1px solid var(--bd);white-space:nowrap}
       <div class="pr"><span>Al elaborador</span><em id="sp-c">$100</em></div>
       <div class="pr"><span>Al vendedor</span><em id="sp-v">$120</em></div>
       <div class="pr"><span>Al público</span><em id="sp-p">$140</em></div>
-      <span class="sy" id="sync">Guardado solo en este navegador</span>
+      <span class="sy" id="sync" role="status">Guardado solo en este navegador</span>
     </div>
   </aside>
   <main>
@@ -362,9 +366,29 @@ td{padding:11px 10px;border-top:1px solid var(--bd);white-space:nowrap}
         </div>
         <div class="msg" id="ms"></div>
       </div>
+      <div class="box set" id="ghbox" hidden>
+        <h2>Guardar en GitHub</h2>
+        <p class="hint">Cada cambio que anotes se guarda solo en un archivo JSON de tu repositorio. Crea un token en GitHub (Settings → Developer settings → Fine-grained tokens) limitado a este repositorio, con permiso <b>Contents: Read and write</b>, y pégalo aquí. Se guarda solo en este navegador.</p>
+        <div class="fm">
+          <div class="fld w2"><label for="gr">Repositorio</label><input id="gr" autocomplete="off" placeholder="usuario/nombre"></div>
+          <div class="fld"><label for="gb">Rama</label><input id="gb" autocomplete="off"></div>
+          <div class="fld"><label for="gp">Archivo</label><input id="gp" autocomplete="off"></div>
+          <div class="fld w2"><label for="gt">Token de GitHub</label><input id="gt" type="password" autocomplete="off" placeholder="github_pat_…"></div>
+        </div>
+        <div class="ia"><button class="pb" id="bgc" type="button">Conectar y guardar</button></div>
+        <p class="hint bad">Si el repositorio es público, cualquiera puede leer el archivo con tus vendedores, ventas y deudas.</p>
+        <div class="msg" id="mg" role="status"></div>
+      </div>
       <div class="box set">
         <h2>Tus datos</h2>
-        <p class="hint" id="dh">Todo lo que anotas se guarda automáticamente.</p>
+        <p class="hint" id="dh">Todo lo que anotas se guarda solo, sin que pulses nada. En el menú lateral ves cuándo fue el último guardado.</p>
+        <h3 class="sh">Archivo JSON</h3>
+        <p class="hint">Una copia completa de tu libreta en un solo archivo, para llevarla a otra computadora o guardarla aparte. La página no puede escribir en archivos de tu equipo por sí sola, así que esta copia se baja cuando tú lo pides.</p>
+        <div class="ia"><button class="pb" id="bfs" type="button">Guardar archivo JSON</button><button class="gh" id="bfo" type="button">Abrir archivo JSON</button><input type="file" id="ffile" accept=".json,application/json" hidden></div>
+        <p class="hint" id="fst"></p>
+        <div class="ia" id="fcf" hidden><button class="pb dn" id="bfr" type="button">Reemplazar mis datos</button><button class="gh" id="bfc" type="button">Cancelar</button></div>
+        <div class="msg" id="mf" role="status"></div>
+        <h3 class="sh">Otras opciones</h3>
         <div class="ia"><button class="gh" id="bex" type="button">Cargar datos de ejemplo</button><button class="gh dn" id="brs" type="button">Empezar desde cero</button></div>
         <div class="msg" id="md"></div>
       </div>
@@ -544,11 +568,33 @@ function movs(vid,type){
 
 /* ---------- persistence ---------- */
 function lsSet(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
-function save(){
-  S.t=Date.now();lsSet();clearTimeout(timer);
-  timer=setTimeout(()=>{if(docRef)docRef.set({s:JSON.stringify(S),t:S.t}).catch(()=>{})},500);
+let retry=null,waiting=false,where="tu cuenta";
+const gh={on:false,r:"RamsesTrujillo/Libreta",b:"main",p:"libreta.json",tok:"",sha:null,ok:false};
+try{const g=JSON.parse(localStorage.getItem("libreta-gh"));if(g)Object.assign(gh,g)}catch(e){}
+gh.on=!!gh.tok;
+const hasStore=()=>docRef||gh.on;
+function setSync(st,t){
+  const el=$("#sync");if(!el)return;
+  const h=t?" · "+String(new Date(t).getHours()).padStart(2,"0")+":"+String(new Date(t).getMinutes()).padStart(2,"0"):"";
+  el.textContent={ok:"Guardado en "+where+h,saving:"Guardando…",err:"No se pudo guardar en "+where+". Reintentando…",local:"Guardado solo en este navegador"}[st]||"";
+  el.dataset.st=st;
 }
-function commit(){save();refresh()}
+function push(){
+  waiting=false;clearTimeout(timer);clearTimeout(retry);
+  if(!hasStore())return;
+  const t=S.t||Date.now();setSync("saving");
+  let copy;try{copy=JSON.parse(JSON.stringify(S))}catch(e){return}
+  const job=gh.on?ghWrite(copy,t):docRef.set({datos:copy,t});
+  job.then(()=>{if(!waiting)setSync("ok",t)}).catch(e=>{if(e&&e.conflict){setSync("ok",S.t);return}setSync("err");retry=setTimeout(push,gh.on?15000:8000)});
+}
+function save(){
+  S.t=Date.now();lsSet();clearTimeout(timer);waiting=true;
+  if(hasStore())setSync("saving");
+  timer=setTimeout(push,gh.on?1500:400);
+}
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&waiting)push()});
+window.addEventListener("pagehide",()=>{if(waiting)push()});
+function commit(){save();refresh();fileStat()}
 function real(){if(S.demo){const cfg=S.cfg;S=blank();S.cfg=cfg}}
 const valid=x=>x&&Array.isArray(x.ent)&&Array.isArray(x.abo)&&Array.isArray(x.vend)&&x.cfg;
 function fix(x){
@@ -564,6 +610,125 @@ function fix(x){
   }
   return x;
 }
+
+/* ---------- GitHub ---------- */
+const b64e=t=>btoa(unescape(encodeURIComponent(t))),b64d=t=>decodeURIComponent(escape(atob(t.replace(/\s/g,""))));
+const ghUrl=()=>"https://api.github.com/repos/"+gh.r+"/contents/"+gh.p.split("/").map(encodeURIComponent).join("/");
+const ghH=()=>{const h={Accept:"application/vnd.github+json"};if(gh.tok)h.Authorization="Bearer "+gh.tok;return h};
+async function ghGet(){
+  const r=await fetch(ghUrl()+"?ref="+encodeURIComponent(gh.b)+"&_="+Date.now(),{headers:ghH(),cache:"no-store"});
+  if(r.status===404){gh.sha=null;return null}
+  if(!r.ok){const e=new Error("gh "+r.status);e.status=r.status;throw e}
+  const j=await r.json();gh.sha=j.sha;
+  let x=null;try{x=JSON.parse(b64d(j.content||""))}catch(e){}
+  return x&&x.datos?x.datos:x;
+}
+async function ghWrite(copy,t,again){
+  const body={message:"Libreta: "+new Date().toISOString().slice(0,16).replace("T"," "),content:b64e(JSON.stringify({app:"libreta",version:2,datos:copy},null,1)),branch:gh.b};
+  if(gh.sha)body.sha=gh.sha;
+  const r=await fetch(ghUrl(),{method:"PUT",headers:Object.assign({"Content-Type":"application/json"},ghH()),body:JSON.stringify(body)});
+  if(r.ok){const j=await r.json();gh.sha=j.content&&j.content.sha;return}
+  if((r.status===409||r.status===422)&&!again){
+    const x=await ghGet();
+    if(x&&valid(x)&&(x.t||0)>t){S=Object.assign(blank(),fix(x));lsSet();refresh();fileStat();const e=new Error("conflict");e.conflict=true;throw e}
+    return ghWrite(copy,t,true);
+  }
+  const e=new Error("gh "+r.status);e.status=r.status;throw e;
+}
+function ghMsg(t,err){msg("#mg",t,err)}
+function ghForm(){
+  $("#gr").value=gh.r;$("#gb").value=gh.b;$("#gp").value=gh.p;$("#gt").value=gh.tok;
+}
+async function ghConnect(){
+  const r=$("#gr").value.trim().replace(/^https?:\/\/github\.com\//,"").replace(/\/+$/,""),b=$("#gb").value.trim()||"main",p=$("#gp").value.trim()||"libreta.json",tok=$("#gt").value.trim();
+  if(!/^[\w.-]+\/[\w.-]+$/.test(r))return ghMsg("Escribe el repositorio como usuario/nombre.",1);
+  if(!tok)return ghMsg("Pega tu token de GitHub para poder guardar.",1);
+  Object.assign(gh,{r,b,p,tok,on:true,sha:null});
+  try{localStorage.setItem("libreta-gh",JSON.stringify({r,b,p,tok}))}catch(e){}
+  where="GitHub";ghMsg("Conectando…");
+  try{
+    const x=await ghGet();
+    if(x&&valid(x)&&(S.demo||!hasData()||(x.t||0)>(S.t||0))){S=Object.assign(blank(),fix(x));lsSet();refresh();fileStat();setSync("ok",x.t);ghMsg("Conectado ✓ Cargué los datos de "+p+".");return}
+    if(!S.demo){await ghWrite(JSON.parse(JSON.stringify(S)),S.t||Date.now());setSync("ok",Date.now());ghMsg("Conectado ✓ Guardé tus datos en "+p+".");return}
+    ghMsg("Conectado ✓ En cuanto anotes algo, se guarda en "+p+".");
+  }catch(e){
+    gh.on=false;
+    ghMsg(e.status===401||e.status===403?"GitHub rechazó el token. Revisa que tenga permiso de escritura sobre este repositorio.":e.status===404?"No encontré el repositorio o la rama. Revisa el nombre y el permiso del token.":"No pude conectar con GitHub.",1);
+  }
+}
+async function ghBoot(){
+  where="GitHub";
+  if(!gh.on)setSync("local");
+  try{
+    const x=await ghGet();
+    if(x&&valid(x)){if((x.t||0)>(S.t||0)||S.demo){S=Object.assign(blank(),fix(x));lsSet();refresh();fileStat()}setSync(gh.on?"ok":"local",x.t)}
+    else if(gh.on&&!S.demo)push();
+  }catch(e){if(gh.on)setSync("err")}
+}
+
+/* ---------- archivo JSON ---------- */
+const LF="libreta-v1-archivo";
+let fileT=0,pend=null;
+try{fileT=+localStorage.getItem(LF)||0}catch(e){}
+function fmtT(t){const d=new Date(t),k=key(d);return (k===key(today())?"hoy":k)+" a las "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")}
+function fileStat(){
+  const el=$("#fst");if(!el)return;
+  if(S.demo){el.textContent="Estás viendo datos de ejemplo. Anota algo tuyo para poder guardar un archivo.";el.className="hint";return}
+  if(!fileT){el.textContent="Todavía no has bajado ninguna copia en archivo.";el.className="hint";return}
+  const dirty=(S.t||0)>fileT;
+  el.textContent="Última copia en archivo: "+fmtT(fileT)+(dirty?". Has anotado cosas después de esa copia.":". Está al día.");
+  el.className="hint";
+}
+function fileJSON(){
+  const d=JSON.parse(JSON.stringify(S));delete d.demo;
+  return JSON.stringify({app:"libreta",version:2,guardado:new Date().toISOString(),datos:d},null,2);
+}
+function copyFallback(txt){
+  if(navigator.clipboard&&navigator.clipboard.writeText)return navigator.clipboard.writeText(txt);
+  return Promise.reject(new Error("no clipboard"));
+}
+$("#bfs").addEventListener("click",async()=>{
+  if(S.demo||!hasData())return msg("#mf","Aún no hay datos tuyos que guardar.",1);
+  const txt=fileJSON(),name="libreta-"+key(today())+".json";
+  let dl=null;try{dl=window.claude&&claude.use?await claude.use("downloads"):null}catch(e){}
+  if(dl){
+    try{await dl.save({filename:name,data:txt});fileT=Date.now();try{localStorage.setItem(LF,String(fileT))}catch(e){}fileStat();msg("#mf","Archivo listo ✓ "+name);}
+    catch(e){if(e&&e.code==="declined")msg("#mf","No se guardó el archivo.",1);else msg("#mf","No se pudo guardar el archivo aquí.",1)}
+    return;
+  }
+  if(!(window.claude&&claude.use)){
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type:"application/json"}));a.download=name;document.body.appendChild(a);a.click();a.remove();
+    fileT=Date.now();try{localStorage.setItem(LF,String(fileT))}catch(e){}fileStat();msg("#mf","Archivo listo ✓ "+name);return;
+  }
+  copyFallback(txt).then(()=>msg("#mf","Este espacio no permite descargar. Copié el contenido: pégalo en un archivo "+name+".")).catch(()=>msg("#mf","Este espacio no permite guardar archivos.",1));
+});
+$("#bfo").addEventListener("click",()=>{$("#ffile").value="";$("#ffile").click()});
+function endPend(){pend=null;$("#fcf").hidden=true}
+function applyFile(x){
+  S=Object.assign(blank(),fix(x));S.demo=false;S.t=Date.now();
+  fileT=S.t;try{localStorage.setItem(LF,String(fileT))}catch(e){}
+  commit();endPend();
+  msg("#mf","Archivo abierto ✓ "+nf(S.ent.length)+" entregas, "+nf(S.ped.length)+" pedidos, "+nf(S.abo.length)+" cobros y "+nf(S.vend.length)+" vendedores.");
+}
+$("#ffile").addEventListener("change",()=>{
+  const f=$("#ffile").files[0];if(!f)return;
+  endPend();
+  if(f.size>20*1024*1024)return msg("#mf","El archivo es demasiado grande.",1);
+  const r=new FileReader();
+  r.onerror=()=>msg("#mf","No se pudo leer el archivo.",1);
+  r.onload=()=>{
+    let j=null;try{j=JSON.parse(r.result)}catch(e){}
+    const x=j&&j.datos?j.datos:j;
+    if(!valid(x))return msg("#mf","Ese archivo no es una libreta válida.",1);
+    if(!Array.isArray(x.ped))x.ped=undefined;
+    if(S.demo||!hasData())return applyFile(x);
+    pend=x;$("#fcf").hidden=false;
+    msg("#mf","El archivo trae "+nf(x.ent.length)+" entregas y "+nf((x.ped||[]).length)+" pedidos. Si lo abres, se reemplaza lo que tienes ahora.",1);
+  };
+  r.readAsText(f);
+});
+$("#bfr").addEventListener("click",()=>{if(pend)applyFile(pend)});
+$("#bfc").addEventListener("click",()=>{endPend();msg("#mf","Se mantuvieron tus datos actuales.")});
 
 /* ---------- ui helpers ---------- */
 function tween(el,a,b,f){
@@ -954,19 +1119,20 @@ $("#brs").addEventListener("click",function(){
 /* ---------- boot ---------- */
 let loaded=null;try{loaded=JSON.parse(localStorage.getItem(LS))}catch(e){}
 if(valid(loaded))S=Object.assign(blank(),fix(loaded));else sample();
-buildKpis();refresh();go("resumen");
+buildKpis();refresh();fileStat();go("resumen");
 
-function setSync(ok){$("#sync").textContent=ok?"Guardado en tu cuenta":"Guardado solo en este navegador"}
-if(window.claude&&claude.use){
+if(!(window.claude&&claude.use)){
+  $("#ghbox").hidden=false;ghForm();$("#bgc").addEventListener("click",ghConnect);ghBoot();
+}else{
   Promise.all([claude.use("db"),claude.use("user")]).then(r=>{
     const db=r[0],u=r[1];if(!db||!u)return;
     return u.id().then(id=>{
       if(!id)return;
-      docRef=db.collection("data/users/"+id).doc("libreta");setSync(true);
+      docRef=db.collection("data/users/"+id).doc("libreta");setSync("ok");
       return docRef.get().then(sn=>{
-        const d=sn.exists&&sn.data();let x=null;try{x=d&&JSON.parse(d.s)}catch(e){}
-        if(valid(x)&&(d.t||0)>(S.t||0)){S=Object.assign(blank(),fix(x));S.t=d.t;lsSet();refresh()}
-        else if(!S.demo){docRef.set({s:JSON.stringify(S),t:S.t||Date.now()}).catch(()=>{})}
+        const d=sn.exists&&sn.data();let x=null;try{x=d&&(d.datos||JSON.parse(d.s))}catch(e){}
+        if(valid(x)&&(d.t||0)>(S.t||0)){S=Object.assign(blank(),fix(x));S.t=d.t;lsSet();refresh();fileStat();setSync("ok",d.t)}
+        else if(!S.demo){push()}
       });
     });
   }).catch(()=>{});
@@ -974,4 +1140,4 @@ if(window.claude&&claude.use){
 })();
 </script>
 
-</body></html>
+</html>
