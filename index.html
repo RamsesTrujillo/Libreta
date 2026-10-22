@@ -293,6 +293,7 @@ td{padding:11px 10px;border-top:1px solid var(--bd);white-space:nowrap}
       <button class="ib btn addb openm" type="button"><svg class="ic"><use href="#i-plus"/></svg>Anotar</button>
       <button class="ib" id="theme" type="button" aria-label="Cambiar tema"><svg class="ic"><use href="#i-sun"/></svg></button>
     </header>
+    <div class="demo" id="lgb" hidden><span>Inicia sesión para guardar tus datos en la nube.</span><button class="pb" id="blg" type="button">Iniciar sesión</button></div>
     <div class="demo" id="demo" hidden><span>Estás viendo datos de ejemplo.</span><button class="pb" id="bdemo" type="button">Usar mis datos</button></div>
 
     <section class="view" id="v-resumen">
@@ -366,17 +367,22 @@ td{padding:11px 10px;border-top:1px solid var(--bd);white-space:nowrap}
         </div>
         <div class="msg" id="ms"></div>
       </div>
-      <div class="box set" id="ghbox" hidden>
-        <h2>Guardar en GitHub</h2>
-        <p class="hint">Cada cambio que anotes se guarda solo en un archivo JSON de tu repositorio. Crea un token en GitHub (Settings → Developer settings → Fine-grained tokens) limitado a este repositorio, con permiso <b>Contents: Read and write</b>, y pégalo aquí. Se guarda solo en este navegador.</p>
-        <div class="fm">
-          <div class="fld w2"><label for="gr">Repositorio</label><input id="gr" autocomplete="off" placeholder="usuario/nombre"></div>
-          <div class="fld"><label for="gb">Rama</label><input id="gb" autocomplete="off"></div>
-          <div class="fld"><label for="gp">Archivo</label><input id="gp" autocomplete="off"></div>
-          <div class="fld w2"><label for="gt">Token de GitHub</label><input id="gt" type="password" autocomplete="off" placeholder="github_pat_…"></div>
+      <div class="box set" id="sbbox">
+        <h2>Cuenta en la nube</h2>
+        <div id="sbcfg" hidden>
+          <p class="hint">Pega los dos datos de tu proyecto de Supabase (Project Settings → API). Son públicos y se piden solo una vez por navegador.</p>
+          <div class="fm"><div class="fld w2"><label for="su">Project URL</label><input id="su" autocomplete="off" placeholder="https://xxxx.supabase.co"></div><div class="fld w2"><label for="sk">Clave anon public</label><input id="sk" autocomplete="off" placeholder="eyJ…"></div></div>
+          <div class="ia"><button class="pb" id="bsk" type="button">Guardar conexión</button></div>
         </div>
-        <div class="ia"><button class="pb" id="bgc" type="button">Conectar y guardar</button></div>
-        <p class="hint bad">Si el repositorio es público, cualquiera puede leer el archivo con tus vendedores, ventas y deudas.</p>
+        <div id="sbin" hidden>
+          <p class="hint">Entra con tu correo para que lo que anotas se guarde en la nube y aparezca en cualquier dispositivo.</p>
+          <div class="fm"><div class="fld w2"><label for="se">Correo</label><input id="se" type="email" autocomplete="username" inputmode="email"></div><div class="fld w2"><label for="sp">Contraseña</label><input id="sp" type="password" autocomplete="current-password"></div></div>
+          <div class="ia"><button class="pb" id="bin" type="button">Entrar</button><button class="gh" id="bup" type="button">Crear cuenta</button></div>
+        </div>
+        <div id="sbout" hidden>
+          <p class="hint" id="sbwho"></p>
+          <div class="ia"><button class="gh" id="bout" type="button">Cerrar sesión</button></div>
+        </div>
         <div class="msg" id="mg" role="status"></div>
       </div>
       <div class="box set">
@@ -568,31 +574,67 @@ function movs(vid,type){
 
 /* ---------- persistence ---------- */
 function lsSet(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
-let retry=null,waiting=false,where="tu cuenta";
-const gh={on:false,r:"RamsesTrujillo/Libreta",b:"main",p:"libreta.json",tok:"",sha:null,ok:false};
-try{const g=JSON.parse(localStorage.getItem("libreta-gh"));if(g)Object.assign(gh,g)}catch(e){}
-gh.on=!!gh.tok;
-const hasStore=()=>docRef||gh.on;
+let retry=null,waiting=false;
+const SB={url:"",key:""};
+try{const c=JSON.parse(localStorage.getItem("libreta-sb"));if(c&&c.url&&c.key){SB.url=c.url;SB.key=c.key}}catch(e){}
+let ses=null;try{ses=JSON.parse(localStorage.getItem("libreta-ses"))}catch(e){}
+const sbOn=()=>!!(SB.url&&SB.key&&ses&&ses.access_token);
+function setSes(j){
+  ses=j?{access_token:j.access_token,refresh_token:j.refresh_token,user:j.user?{id:j.user.id,email:j.user.email}:(ses&&ses.user)}:null;
+  try{ses?localStorage.setItem("libreta-ses",JSON.stringify(ses)):localStorage.removeItem("libreta-ses")}catch(e){}
+}
+async function refreshSes(){
+  if(!ses||!ses.refresh_token)return false;
+  try{
+    const r=await fetch(SB.url+"/auth/v1/token?grant_type=refresh_token",{method:"POST",headers:{apikey:SB.key,"Content-Type":"application/json"},body:JSON.stringify({refresh_token:ses.refresh_token})});
+    if(r.ok){setSes(await r.json());return true}
+    if(r.status===400||r.status===401||r.status===403){setSes(null);sbUi()}
+  }catch(e){}
+  return false;
+}
+async function api(path,opt,again){
+  opt=opt||{};
+  const h=Object.assign({apikey:SB.key,"Content-Type":"application/json"},opt.headers||{});
+  if(ses)h.Authorization="Bearer "+ses.access_token;
+  const r=await fetch(SB.url+path,Object.assign({},opt,{headers:h}));
+  if(r.status===401&&!again&&ses&&await refreshSes())return api(path,opt,true);
+  return r;
+}
 function setSync(st,t){
   const el=$("#sync");if(!el)return;
   const h=t?" · "+String(new Date(t).getHours()).padStart(2,"0")+":"+String(new Date(t).getMinutes()).padStart(2,"0"):"";
-  el.textContent={ok:"Guardado en "+where+h,saving:"Guardando…",err:"No se pudo guardar en "+where+". Reintentando…",local:"Guardado solo en este navegador"}[st]||"";
+  el.textContent={ok:"Guardado en tu cuenta"+h,saving:"Guardando…",err:"No se pudo guardar en la nube. Reintentando…",login:"Guardado solo en este navegador. Inicia sesión para guardar en la nube.",local:"Guardado solo en este navegador"}[st]||"";
   el.dataset.st=st;
+  const b=$("#lgb");if(b)b.hidden=!(st==="login");
 }
-function push(){
+async function pull(){
+  if(!sbOn()||waiting)return;
+  const r=await api("/rest/v1/libreta?select=datos,t&limit=1",{method:"GET"});
+  if(!r.ok)throw new Error("pull "+r.status);
+  const a=await r.json(),d=a&&a[0];
+  if(d&&valid(d.datos)&&(S.demo||(d.t||0)>(S.t||0))){S=Object.assign(blank(),fix(d.datos));S.t=d.t;lsSet();refresh();fileStat();setSync("ok",d.t);return}
+  if(!S.demo&&(!d||(S.t||0)>(d.t||0)))return push();
+  setSync("ok",d&&d.t);
+}
+async function push(){
   waiting=false;clearTimeout(timer);clearTimeout(retry);
-  if(!hasStore())return;
+  if(!sbOn())return;
   const t=S.t||Date.now();setSync("saving");
   let copy;try{copy=JSON.parse(JSON.stringify(S))}catch(e){return}
-  const job=gh.on?ghWrite(copy,t):docRef.set({datos:copy,t});
-  job.then(()=>{if(!waiting)setSync("ok",t)}).catch(e=>{if(e&&e.conflict){setSync("ok",S.t);return}setSync("err");retry=setTimeout(push,gh.on?15000:8000)});
+  try{
+    const r=await api("/rest/v1/libreta?on_conflict=user_id",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({user_id:ses.user.id,datos:copy,t,updated_at:new Date().toISOString()})});
+    if(!r.ok)throw new Error("push "+r.status);
+    if(!waiting)setSync("ok",t);
+  }catch(e){setSync("err");retry=setTimeout(push,15000)}
 }
 function save(){
   S.t=Date.now();lsSet();clearTimeout(timer);waiting=true;
-  if(hasStore())setSync("saving");
-  timer=setTimeout(push,gh.on?1500:400);
+  if(sbOn()){setSync("saving");timer=setTimeout(push,1200)}else setSync(SB.url?"login":"local");
 }
-document.addEventListener("visibilitychange",()=>{if(document.hidden&&waiting)push()});
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden){if(waiting)push()}
+  else if(sbOn()&&!waiting)pull().catch(()=>{});
+});
 window.addEventListener("pagehide",()=>{if(waiting)push()});
 function commit(){save();refresh();fileStat()}
 function real(){if(S.demo){const cfg=S.cfg;S=blank();S.cfg=cfg}}
@@ -611,61 +653,35 @@ function fix(x){
   return x;
 }
 
-/* ---------- GitHub ---------- */
-const b64e=t=>btoa(unescape(encodeURIComponent(t))),b64d=t=>decodeURIComponent(escape(atob(t.replace(/\s/g,""))));
-const ghUrl=()=>"https://api.github.com/repos/"+gh.r+"/contents/"+gh.p.split("/").map(encodeURIComponent).join("/");
-const ghH=()=>{const h={Accept:"application/vnd.github+json"};if(gh.tok)h.Authorization="Bearer "+gh.tok;return h};
-async function ghGet(){
-  const r=await fetch(ghUrl()+"?ref="+encodeURIComponent(gh.b)+"&_="+Date.now(),{headers:ghH(),cache:"no-store"});
-  if(r.status===404){gh.sha=null;return null}
-  if(!r.ok){const e=new Error("gh "+r.status);e.status=r.status;throw e}
-  const j=await r.json();gh.sha=j.sha;
-  let x=null;try{x=JSON.parse(b64d(j.content||""))}catch(e){}
-  return x&&x.datos?x.datos:x;
+/* ---------- cuenta en la nube ---------- */
+function sbMsg(t,err){msg("#mg",t,err)}
+function sbUi(){
+  const hasCfg=!!(SB.url&&SB.key);
+  $("#sbcfg").hidden=hasCfg;$("#sbin").hidden=!hasCfg||sbOn();$("#sbout").hidden=!sbOn();
+  if(sbOn())$("#sbwho").textContent="Sesión iniciada como "+(ses.user&&ses.user.email||"tu cuenta")+". Todo lo que anotas se guarda solo en la nube.";
+  if(!hasCfg){$("#su").value=SB.url;$("#sk").value=SB.key}
 }
-async function ghWrite(copy,t,again){
-  const body={message:"Libreta: "+new Date().toISOString().slice(0,16).replace("T"," "),content:b64e(JSON.stringify({app:"libreta",version:2,datos:copy},null,1)),branch:gh.b};
-  if(gh.sha)body.sha=gh.sha;
-  const r=await fetch(ghUrl(),{method:"PUT",headers:Object.assign({"Content-Type":"application/json"},ghH()),body:JSON.stringify(body)});
-  if(r.ok){const j=await r.json();gh.sha=j.content&&j.content.sha;return}
-  if((r.status===409||r.status===422)&&!again){
-    const x=await ghGet();
-    if(x&&valid(x)&&(x.t||0)>t){S=Object.assign(blank(),fix(x));lsSet();refresh();fileStat();const e=new Error("conflict");e.conflict=true;throw e}
-    return ghWrite(copy,t,true);
-  }
-  const e=new Error("gh "+r.status);e.status=r.status;throw e;
-}
-function ghMsg(t,err){msg("#mg",t,err)}
-function ghForm(){
-  $("#gr").value=gh.r;$("#gb").value=gh.b;$("#gp").value=gh.p;$("#gt").value=gh.tok;
-}
-async function ghConnect(){
-  const r=$("#gr").value.trim().replace(/^https?:\/\/github\.com\//,"").replace(/\/+$/,""),b=$("#gb").value.trim()||"main",p=$("#gp").value.trim()||"libreta.json",tok=$("#gt").value.trim();
-  if(!/^[\w.-]+\/[\w.-]+$/.test(r))return ghMsg("Escribe el repositorio como usuario/nombre.",1);
-  if(!tok)return ghMsg("Pega tu token de GitHub para poder guardar.",1);
-  Object.assign(gh,{r,b,p,tok,on:true,sha:null});
-  try{localStorage.setItem("libreta-gh",JSON.stringify({r,b,p,tok}))}catch(e){}
-  where="GitHub";ghMsg("Conectando…");
+function errTxt(j,fb){const m=j&&(j.msg||j.error_description||j.message||"");
+  if(/invalid login/i.test(m))return "Correo o contraseña incorrectos.";
+  if(/already registered|already been registered/i.test(m))return "Ese correo ya tiene cuenta. Pulsa Entrar.";
+  if(/password/i.test(m)&&/6|short|weak/i.test(m))return "La contraseña debe tener al menos 6 caracteres.";
+  if(/signups? not allowed|disabled/i.test(m))return "En esta libreta ya no se pueden crear cuentas nuevas.";
+  if(/not confirmed/i.test(m))return "Confirma tu correo con el enlace que te llegó y vuelve a entrar.";
+  return fb}
+async function sbAuth(signup){
+  const email=$("#se").value.trim(),pw=$("#sp").value;
+  if(!/^\S+@\S+\.\S+$/.test(email))return sbMsg("Escribe un correo válido.",1);
+  if(pw.length<6)return sbMsg("La contraseña debe tener al menos 6 caracteres.",1);
+  sbMsg(signup?"Creando cuenta…":"Entrando…");
   try{
-    const x=await ghGet();
-    if(x&&valid(x)&&(S.demo||!hasData()||(x.t||0)>(S.t||0))){S=Object.assign(blank(),fix(x));lsSet();refresh();fileStat();setSync("ok",x.t);ghMsg("Conectado ✓ Cargué los datos de "+p+".");return}
-    if(!S.demo){await ghWrite(JSON.parse(JSON.stringify(S)),S.t||Date.now());setSync("ok",Date.now());ghMsg("Conectado ✓ Guardé tus datos en "+p+".");return}
-    ghMsg("Conectado ✓ En cuanto anotes algo, se guarda en "+p+".");
-  }catch(e){
-    gh.on=false;
-    ghMsg(e.status===401||e.status===403?"GitHub rechazó el token. Revisa que tenga permiso de escritura sobre este repositorio.":e.status===404?"No encontré el repositorio o la rama. Revisa el nombre y el permiso del token.":"No pude conectar con GitHub.",1);
-  }
+    const r=await fetch(SB.url+(signup?"/auth/v1/signup":"/auth/v1/token?grant_type=password"),{method:"POST",headers:{apikey:SB.key,"Content-Type":"application/json"},body:JSON.stringify({email,password:pw})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)return sbMsg(errTxt(j,"No pude iniciar sesión ("+r.status+")."),1);
+    if(!j.access_token)return sbMsg("Cuenta creada. Revisa tu correo, confirma el enlace y vuelve a pulsar Entrar.");
+    setSes(j);$("#sp").value="";sbUi();sbMsg("Sesión iniciada ✓");setSync("saving");
+    try{await pull()}catch(e){setSync("err")}
+  }catch(e){sbMsg("No pude conectar con Supabase. Revisa la dirección y tu conexión.",1)}
 }
-async function ghBoot(){
-  where="GitHub";
-  if(!gh.on)setSync("local");
-  try{
-    const x=await ghGet();
-    if(x&&valid(x)){if((x.t||0)>(S.t||0)||S.demo){S=Object.assign(blank(),fix(x));lsSet();refresh();fileStat()}setSync(gh.on?"ok":"local",x.t)}
-    else if(gh.on&&!S.demo)push();
-  }catch(e){if(gh.on)setSync("err")}
-}
-
 /* ---------- archivo JSON ---------- */
 const LF="libreta-v1-archivo";
 let fileT=0,pend=null;
@@ -697,6 +713,10 @@ $("#bfs").addEventListener("click",async()=>{
     return;
   }
   if(!(window.claude&&claude.use)){
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type:"application/json"}));a.download=name;document.body.appendChild(a);a.click();a.remove();
+    fileT=Date.now();try{localStorage.setItem(LF,String(fileT))}catch(e){}fileStat();msg("#mf","Archivo listo ✓ "+name);return;
+  }
+  if(true){
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type:"application/json"}));a.download=name;document.body.appendChild(a);a.click();a.remove();
     fileT=Date.now();try{localStorage.setItem(LF,String(fileT))}catch(e){}fileStat();msg("#mf","Archivo listo ✓ "+name);return;
   }
@@ -1121,22 +1141,20 @@ let loaded=null;try{loaded=JSON.parse(localStorage.getItem(LS))}catch(e){}
 if(valid(loaded))S=Object.assign(blank(),fix(loaded));else sample();
 buildKpis();refresh();fileStat();go("resumen");
 
-if(!(window.claude&&claude.use)){
-  $("#ghbox").hidden=false;ghForm();$("#bgc").addEventListener("click",ghConnect);ghBoot();
-}else{
-  Promise.all([claude.use("db"),claude.use("user")]).then(r=>{
-    const db=r[0],u=r[1];if(!db||!u)return;
-    return u.id().then(id=>{
-      if(!id)return;
-      docRef=db.collection("data/users/"+id).doc("libreta");setSync("ok");
-      return docRef.get().then(sn=>{
-        const d=sn.exists&&sn.data();let x=null;try{x=d&&(d.datos||JSON.parse(d.s))}catch(e){}
-        if(valid(x)&&(d.t||0)>(S.t||0)){S=Object.assign(blank(),fix(x));S.t=d.t;lsSet();refresh();fileStat();setSync("ok",d.t)}
-        else if(!S.demo){push()}
-      });
-    });
-  }).catch(()=>{});
-}
+$("#bsk").addEventListener("click",()=>{
+  const u=$("#su").value.trim().replace(/\/+$/,""),k=$("#sk").value.trim();
+  if(!/^https:\/\/[\w-]+\.supabase\.co$/.test(u))return sbMsg("La dirección debe verse así: https://xxxx.supabase.co",1);
+  if(k.length<20)return sbMsg("Pega la clave «anon public».",1);
+  SB.url=u;SB.key=k;try{localStorage.setItem("libreta-sb",JSON.stringify({url:u,key:k}))}catch(e){}
+  sbUi();sbMsg("Conexión guardada ✓ Ahora inicia sesión.");setSync("login");
+});
+$("#bin").addEventListener("click",()=>sbAuth(false));
+$("#bup").addEventListener("click",()=>sbAuth(true));
+$("#sp").addEventListener("keydown",e=>{if(e.key==="Enter")sbAuth(false)});
+$("#bout").addEventListener("click",()=>{setSes(null);sbUi();setSync("login");sbMsg("Sesión cerrada. Los datos siguen en este navegador.")});
+$("#blg").addEventListener("click",()=>go("ajustes"));
+sbUi();
+if(sbOn()){setSync("saving");pull().catch(()=>setSync("err"))}else setSync(SB.url?"login":"local");
 })();
 </script>
 
