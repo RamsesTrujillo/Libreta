@@ -575,7 +575,7 @@ function movs(vid,type){
 /* ---------- persistence ---------- */
 function lsSet(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
 let retry=null,waiting=false;
-const SB={url:"",key:""};
+const SB={url:"https://lqitbwpveixcwlbtslcl.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxxaXRid3B2ZWl4Y3dsYnRzbGNsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2MjU4OTIsImV4cCI6MjEwODIwMTg5Mn0.YZiZMF9GY8mPZI7bxj0unSEvHDIcmLU03dRPh2gZKZ8"};
 try{const c=JSON.parse(localStorage.getItem("libreta-sb"));if(c&&c.url&&c.key){SB.url=c.url;SB.key=c.key}}catch(e){}
 let ses=null;try{ses=JSON.parse(localStorage.getItem("libreta-ses"))}catch(e){}
 const sbOn=()=>!!(SB.url&&SB.key&&ses&&ses.access_token);
