@@ -584,7 +584,7 @@ function movs(vid,type){
 
 /* ---------- persistence ---------- */
 function lsSet(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
-let retry=null,waiting=false;
+let retry=null,waiting=false,lastErr="";
 const SB={url:"https://lqitbwpveixcwlbtslcl.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxxaXRid3B2ZWl4Y3dsYnRzbGNsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI2MjU4OTIsImV4cCI6MjEwODIwMTg5Mn0.YZiZMF9GY8mPZI7bxj0unSEvHDIcmLU03dRPh2gZKZ8"};
 try{const c=JSON.parse(localStorage.getItem("libreta-sb"));if(c&&c.url&&c.key){SB.url=c.url;SB.key=c.key}}catch(e){}
 let ses=null;try{ses=JSON.parse(localStorage.getItem("libreta-ses"))}catch(e){}
@@ -613,13 +613,17 @@ async function api(path,opt,again){
 function setSync(st,t){
   const el=$("#sync");if(!el)return;
   const h=t?" · "+String(new Date(t).getHours()).padStart(2,"0")+":"+String(new Date(t).getMinutes()).padStart(2,"0"):"";
-  el.textContent={ok:"Guardado en tu cuenta"+h,saving:"Guardando…",err:"No se pudo guardar en la nube. Reintentando…",login:"Guardado solo en este navegador. Inicia sesión para guardar en la nube.",local:"Guardado solo en este navegador"}[st]||"";
+  el.textContent={ok:"Guardado en tu cuenta"+h,saving:"Guardando…",err:"No se pudo guardar en la nube"+(lastErr?" ("+lastErr+")":"")+". Reintentando…",login:"Guardado solo en este navegador. Inicia sesión para guardar en la nube.",local:"Guardado solo en este navegador"}[st]||"";
   el.dataset.st=st;
+}
+async function httpErr(r){
+  let m="";try{const j=await r.json();m=j.message||j.msg||j.hint||j.error_description||""}catch(e){}
+  const e=new Error("http "+r.status);e.detail=r.status+(m?": "+String(m).slice(0,90):"");return e;
 }
 async function pull(){
   if(!sbOn()||waiting)return;
   const r=await api("/rest/v1/libreta?select=datos,t&limit=1",{method:"GET"});
-  if(!r.ok)throw new Error("pull "+r.status);
+  if(!r.ok)throw await httpErr(r);
   const a=await r.json(),d=a&&a[0];
   if(d&&valid(d.datos)&&(S.demo||(d.t||0)>(S.t||0))){S=Object.assign(blank(),fix(d.datos));S.t=d.t;lsSet();refresh();fileStat();setSync("ok",d.t);return}
   if(!S.demo&&(!d||(S.t||0)>(d.t||0)))return push();
@@ -632,9 +636,9 @@ async function push(){
   let copy;try{copy=JSON.parse(JSON.stringify(S))}catch(e){return}
   try{
     const r=await api("/rest/v1/libreta?on_conflict=user_id",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({user_id:ses.user.id,datos:copy,t,updated_at:new Date().toISOString()})});
-    if(!r.ok)throw new Error("push "+r.status);
+    if(!r.ok)throw await httpErr(r);
     if(!waiting)setSync("ok",t);
-  }catch(e){setSync("err");retry=setTimeout(push,15000)}
+  }catch(e){lastErr=e&&e.detail||"sin conexión con Supabase";setSync("err");retry=setTimeout(push,15000)}
 }
 function save(){
   S.t=Date.now();lsSet();clearTimeout(timer);waiting=true;
@@ -1166,7 +1170,7 @@ $("#bup").addEventListener("click",()=>sbAuth(true));
 $("#sp").addEventListener("keydown",e=>{if(e.key==="Enter")sbAuth(false)});
 $("#bout").addEventListener("click",()=>{setSes(null);sbUi();setSync("login");sbMsg("Sesión cerrada. Entra de nuevo cuando quieras.")});
 sbUi();
-if(sbOn()){setSync("saving");pull().catch(()=>setSync("err"))}else setSync(SB.url?"login":"local");
+if(sbOn()){setSync("saving");pull().catch(e=>{lastErr=e&&e.detail||"sin conexión con Supabase";setSync("err")})}else setSync(SB.url?"login":"local");
 })();
 </script>
 
