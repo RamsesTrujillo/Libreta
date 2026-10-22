@@ -227,6 +227,11 @@ td{padding:11px 10px;border-top:1px solid var(--bd);white-space:nowrap}
 .mod .hint{margin-bottom:10px}
 .ft{margin-top:14px;padding-top:12px;border-top:1px solid var(--bd)}
 
+.gate{position:fixed;inset:0;z-index:100;background:var(--bg);display:grid;place-items:center;overflow:auto;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.gate[hidden]{display:none}
+.gc{width:100%;max-width:400px;display:grid;gap:14px;background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:24px}
+.gc h1{font:700 24px/1.15 var(--fd);letter-spacing:-.02em;text-wrap:balance}
+.gc .brand{padding:0;margin:0}
 #bnav{display:none}
 @media (max-width:1100px){
   .kpis{grid-template-columns:repeat(2,1fr)}
@@ -293,7 +298,6 @@ td{padding:11px 10px;border-top:1px solid var(--bd);white-space:nowrap}
       <button class="ib btn addb openm" type="button"><svg class="ic"><use href="#i-plus"/></svg>Anotar</button>
       <button class="ib" id="theme" type="button" aria-label="Cambiar tema"><svg class="ic"><use href="#i-sun"/></svg></button>
     </header>
-    <div class="demo" id="lgb" hidden><span>Inicia sesión para guardar tus datos en la nube.</span><button class="pb" id="blg" type="button">Iniciar sesión</button></div>
     <div class="demo" id="demo" hidden><span>Estás viendo datos de ejemplo.</span><button class="pb" id="bdemo" type="button">Usar mis datos</button></div>
 
     <section class="view" id="v-resumen">
@@ -369,21 +373,8 @@ td{padding:11px 10px;border-top:1px solid var(--bd);white-space:nowrap}
       </div>
       <div class="box set" id="sbbox">
         <h2>Cuenta en la nube</h2>
-        <div id="sbcfg" hidden>
-          <p class="hint">Pega los dos datos de tu proyecto de Supabase (Project Settings → API). Son públicos y se piden solo una vez por navegador.</p>
-          <div class="fm"><div class="fld w2"><label for="su">Project URL</label><input id="su" autocomplete="off" placeholder="https://xxxx.supabase.co"></div><div class="fld w2"><label for="sk">Clave anon public</label><input id="sk" autocomplete="off" placeholder="eyJ…"></div></div>
-          <div class="ia"><button class="pb" id="bsk" type="button">Guardar conexión</button></div>
-        </div>
-        <div id="sbin" hidden>
-          <p class="hint">Entra con tu correo para que lo que anotas se guarde en la nube y aparezca en cualquier dispositivo.</p>
-          <div class="fm"><div class="fld w2"><label for="se">Correo</label><input id="se" type="email" autocomplete="username" inputmode="email"></div><div class="fld w2"><label for="sp">Contraseña</label><input id="sp" type="password" autocomplete="current-password"></div></div>
-          <div class="ia"><button class="pb" id="bin" type="button">Entrar</button><button class="gh" id="bup" type="button">Crear cuenta</button></div>
-        </div>
-        <div id="sbout" hidden>
-          <p class="hint" id="sbwho"></p>
-          <div class="ia"><button class="gh" id="bout" type="button">Cerrar sesión</button></div>
-        </div>
-        <div class="msg" id="mg" role="status"></div>
+        <p class="hint" id="sbwho"></p>
+        <div class="ia"><button class="gh" id="bout" type="button">Cerrar sesión</button></div>
       </div>
       <div class="box set">
         <h2>Tus datos</h2>
@@ -466,6 +457,25 @@ td{padding:11px 10px;border-top:1px solid var(--bd);white-space:nowrap}
       <div class="msg" id="m2" role="status"></div>
     </form>
     <div class="ft hint" id="dnote" hidden>Al guardar, se quitan los datos de ejemplo.</div>
+  </div>
+</div>
+
+<div class="gate" id="gate" role="dialog" aria-modal="true" aria-labelledby="gt">
+  <div class="gc">
+    <div class="brand"><div class="logo"></div>Libreta</div>
+    <h1 id="gt">Entra a tu libreta</h1>
+    <p class="hint">Inicia sesión una sola vez. Este dispositivo recordará tu cuenta y tus datos aparecerán donde entres.</p>
+        <div id="sbcfg" hidden>
+          <p class="hint">Pega los dos datos de tu proyecto de Supabase (Project Settings → API). Son públicos y se piden solo una vez por navegador.</p>
+          <div class="fm"><div class="fld w2"><label for="sbu">Project URL</label><input id="sbu" autocomplete="off" placeholder="https://xxxx.supabase.co"></div><div class="fld w2"><label for="sbk">Clave anon public</label><input id="sbk" autocomplete="off" placeholder="eyJ…"></div></div>
+          <div class="ia"><button class="pb" id="bsk" type="button">Guardar conexión</button></div>
+        </div>
+        <div id="sbin">
+          <p class="hint">Entra con tu correo para que lo que anotas se guarde en la nube y aparezca en cualquier dispositivo.</p>
+          <div class="fm"><div class="fld w2"><label for="se">Correo</label><input id="se" type="email" autocomplete="username" inputmode="email"></div><div class="fld w2"><label for="sp">Contraseña</label><input id="sp" type="password" autocomplete="current-password"></div></div>
+          <div class="ia"><button class="pb" id="bin" type="button">Entrar</button><button class="gh" id="bup" type="button">Crear cuenta</button></div>
+        </div>
+    <div class="msg" id="mg" role="status"></div>
   </div>
 </div>
 
@@ -605,7 +615,6 @@ function setSync(st,t){
   const h=t?" · "+String(new Date(t).getHours()).padStart(2,"0")+":"+String(new Date(t).getMinutes()).padStart(2,"0"):"";
   el.textContent={ok:"Guardado en tu cuenta"+h,saving:"Guardando…",err:"No se pudo guardar en la nube. Reintentando…",login:"Guardado solo en este navegador. Inicia sesión para guardar en la nube.",local:"Guardado solo en este navegador"}[st]||"";
   el.dataset.st=st;
-  const b=$("#lgb");if(b)b.hidden=!(st==="login");
 }
 async function pull(){
   if(!sbOn()||waiting)return;
@@ -657,9 +666,13 @@ function fix(x){
 function sbMsg(t,err){msg("#mg",t,err)}
 function sbUi(){
   const hasCfg=!!(SB.url&&SB.key);
-  $("#sbcfg").hidden=hasCfg;$("#sbin").hidden=!hasCfg||sbOn();$("#sbout").hidden=!sbOn();
+  const g=$("#gate"),was=g.hidden;
+  $("#sbcfg").hidden=hasCfg;$("#sbin").hidden=!hasCfg;
+  g.hidden=sbOn();document.body.style.overflow=sbOn()?"":"hidden";
+  if(!sbOn()&&was){setTimeout(()=>{const f=hasCfg?$("#se"):$("#sbu");if(f)f.focus()},60)}
   if(sbOn())$("#sbwho").textContent="Sesión iniciada como "+(ses.user&&ses.user.email||"tu cuenta")+". Todo lo que anotas se guarda solo en la nube.";
-  if(!hasCfg){$("#su").value=SB.url;$("#sk").value=SB.key}
+  if(!sbOn())$("#sp").value="";
+  if(!hasCfg){$("#sbu").value=SB.url;$("#sbk").value=SB.key}
 }
 function errTxt(j,fb){const m=j&&(j.msg||j.error_description||j.message||"");
   if(/invalid login/i.test(m))return "Correo o contraseña incorrectos.";
@@ -678,7 +691,7 @@ async function sbAuth(signup){
     const j=await r.json().catch(()=>({}));
     if(!r.ok)return sbMsg(errTxt(j,"No pude iniciar sesión ("+r.status+")."),1);
     if(!j.access_token)return sbMsg("Cuenta creada. Revisa tu correo, confirma el enlace y vuelve a pulsar Entrar.");
-    setSes(j);$("#sp").value="";sbUi();sbMsg("Sesión iniciada ✓");setSync("saving");
+    setSes(j);$("#sp").value="";sbUi();sbMsg("");setSync("saving");
     try{await pull()}catch(e){setSync("err")}
   }catch(e){sbMsg("No pude conectar con Supabase. Revisa la dirección y tu conexión.",1)}
 }
@@ -1142,7 +1155,7 @@ if(valid(loaded))S=Object.assign(blank(),fix(loaded));else sample();
 buildKpis();refresh();fileStat();go("resumen");
 
 $("#bsk").addEventListener("click",()=>{
-  const u=$("#su").value.trim().replace(/\/+$/,""),k=$("#sk").value.trim();
+  const u=$("#sbu").value.trim().replace(/\/+$/,""),k=$("#sbk").value.trim();
   if(!/^https:\/\/[\w-]+\.supabase\.co$/.test(u))return sbMsg("La dirección debe verse así: https://xxxx.supabase.co",1);
   if(k.length<20)return sbMsg("Pega la clave «anon public».",1);
   SB.url=u;SB.key=k;try{localStorage.setItem("libreta-sb",JSON.stringify({url:u,key:k}))}catch(e){}
@@ -1151,8 +1164,7 @@ $("#bsk").addEventListener("click",()=>{
 $("#bin").addEventListener("click",()=>sbAuth(false));
 $("#bup").addEventListener("click",()=>sbAuth(true));
 $("#sp").addEventListener("keydown",e=>{if(e.key==="Enter")sbAuth(false)});
-$("#bout").addEventListener("click",()=>{setSes(null);sbUi();setSync("login");sbMsg("Sesión cerrada. Los datos siguen en este navegador.")});
-$("#blg").addEventListener("click",()=>go("ajustes"));
+$("#bout").addEventListener("click",()=>{setSes(null);sbUi();setSync("login");sbMsg("Sesión cerrada. Entra de nuevo cuando quieras.")});
 sbUi();
 if(sbOn()){setSync("saving");pull().catch(()=>setSync("err"))}else setSync(SB.url?"login":"local");
 })();
